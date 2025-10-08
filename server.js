@@ -10,7 +10,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 // reCAPTCHA секретный ключ (тестовый ключ для разработки)
-const RECAPTCHA_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
+const RECAPTCHA_SECRET_KEY = '6Ldez-IrAAAAAAacbiUmF2eC7QTrcaZDSw7doQQW';
 
 // Хранилище пользователей (в реальном приложении используйте базу данных)
 const users = new Map();

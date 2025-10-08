@@ -9,21 +9,24 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// reCAPTCHA секретный ключ (тестовый ключ для разработки)
+// reCAPTCHA секретный ключ (ваш настоящий ключ)
 const RECAPTCHA_SECRET_KEY = '6Ldez-IrAAAAAAacbiUmF2eC7QTrcaZDSw7doQQW';
 
 // Хранилище пользователей (в реальном приложении используйте базу данных)
 const users = new Map();
 
 // Проверка reCAPTCHA
-async function verifyRecaptcha(recaptchaResponse) {
+async function verifyRecaptcha(recaptchaResponse, remoteAddress) {
     try {
         const response = await axios.post('https://www.google.com/recaptcha/api/siteverify', null, {
             params: {
                 secret: RECAPTCHA_SECRET_KEY,
-                response: recaptchaResponse
+                response: recaptchaResponse,
+                remoteip: remoteAddress
             }
         });
+        
+        console.log('reCAPTCHA verification result:', response.data);
         
         return response.data.success;
     } catch (error) {
@@ -61,11 +64,12 @@ app.post('/register', async (req, res) => {
         }
 
         // Проверка reCAPTCHA
-        const isRecaptchaValid = await verifyRecaptcha(recaptchaResponse);
+        const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+        const isRecaptchaValid = await verifyRecaptcha(recaptchaResponse, clientIP);
         
         if (!isRecaptchaValid) {
             return res.status(400).json({ 
-                error: 'Проверка reCAPTCHA не пройдена' 
+                error: 'Проверка reCAPTCHA не пройдена. Пожалуйста, подтвердите, что вы не робот.' 
             });
         }
 
@@ -80,10 +84,11 @@ app.post('/register', async (req, res) => {
         users.set(username, {
             username,
             password, // В реальном приложении используйте bcrypt для хэширования!
-            registeredAt: new Date().toISOString()
+            registeredAt: new Date().toISOString(),
+            ip: clientIP
         });
 
-        console.log(`Новый пользователь зарегистрирован: ${username}`);
+        console.log(`Новый пользователь зарегистрирован: ${username} с IP: ${clientIP}`);
 
         res.json({ 
             success: true, 
@@ -107,10 +112,23 @@ app.get('/users', (req, res) => {
     
     const usersArray = Array.from(users.values()).map(user => ({
         username: user.username,
-        registeredAt: user.registeredAt
+        registeredAt: user.registeredAt,
+        ip: user.ip
     }));
     
-    res.json(usersArray);
+    res.json({
+        total: usersArray.length,
+        users: usersArray
+    });
+});
+
+// Маршрут для проверки здоровья сервера
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        usersCount: users.size
+    });
 });
 
 // Обработка 404
@@ -125,6 +143,8 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
-    console.log(`Откройте http://localhost:${PORT} в браузере`);
+    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+    console.log(`📍 Откройте http://localhost:${PORT} в браузере`);
+    console.log(`🔑 reCAPTCHA настроена с вашими ключами`);
+    console.log(`📊 Всего зарегистрированных пользователей: ${users.size}`);
 });

@@ -31,9 +31,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        // Basic file type validation
         const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt|zip/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
@@ -107,18 +106,18 @@ async function initDatabase() {
             )
         `);
 
-        // Create default admin user
+        // Create default admin users
         const adminResult = await pool.query(
-            'SELECT * FROM users WHERE email = $1 OR name IN ($2, $3)',
-            ['admin@wounsee.com', 'wounsee', 'Wounsee']
+            'SELECT * FROM users WHERE name IN ($1, $2)',
+            ['wounsee', 'Wounsee']
         );
 
         if (adminResult.rows.length === 0) {
             await pool.query(
-                'INSERT INTO users (email, name, role) VALUES ($1, $2, $3)',
-                ['admin@wounsee.com', 'Wounsee', 'admin']
+                'INSERT INTO users (email, name, role) VALUES ($1, $2, $3), ($4, $5, $6)',
+                ['wounsee@admin.com', 'wounsee', 'admin', 'Wounsee@admin.com', 'Wounsee', 'admin']
             );
-            console.log('Default admin user created');
+            console.log('Default admin users created: wounsee and Wounsee');
         }
 
         // Create default category
@@ -183,6 +182,42 @@ function sanitizeMarkdown(content) {
 app.post('/auth/google', async (req, res) => {
     try {
         const { token } = req.body;
+        
+        if (!process.env.GOOGLE_CLIENT_ID) {
+            // Fallback: simple auth for development
+            const userResult = await pool.query(
+                'SELECT * FROM users WHERE name = $1 OR email = $2',
+                [token, token] // using token as username/email for dev
+            );
+
+            let user;
+            if (userResult.rows.length === 0) {
+                // Create new user
+                userResult = await pool.query(
+                    `INSERT INTO users (email, name, role) 
+                     VALUES ($1, $2, $3) 
+                     RETURNING id, email, name, role`,
+                    [`${token}@dev.com`, token, 'user']
+                );
+                user = userResult.rows[0];
+            } else {
+                user = userResult.rows[0];
+            }
+
+            const jwtToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+
+            return res.json({
+                success: true,
+                token: jwtToken,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    role: user.role
+                }
+            });
+        }
+
         const ticket = await googleClient.verifyIdToken({
             idToken: token,
             audience: process.env.GOOGLE_CLIENT_ID
@@ -369,6 +404,9 @@ async function startServer() {
     app.listen(PORT, () => {
         console.log(`🚀 Wounsee Forum запущен на порту ${PORT}`);
         console.log(`📍 Откройте http://localhost:${PORT} в браузере`);
+        if (!process.env.GOOGLE_CLIENT_ID) {
+            console.log('⚠️  GOOGLE_CLIENT_ID не настроен, используется упрощенная аутентификация');
+        }
     });
 }
 

@@ -20,7 +20,8 @@
     "passport-google-oauth20": "^2.0.0",
     "marked": "^9.1.2",
     "dompurify": "^3.0.5",
-    "jsdom": "^22.1.0"
+    "jsdom": "^22.1.0",
+    "google-auth-library": "^9.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
